@@ -10,6 +10,8 @@ namespace AndroidApp1
     public class MainActivity : Activity
     {
         ImageView imageView;
+        Bitmap    bitmap;
+        Button    button;
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
@@ -19,7 +21,7 @@ namespace AndroidApp1
             SetContentView(Resource.Layout.activity_main);
 
             imageView = (ImageView)FindViewById(Resource.Id.imageView1);
-            Button button = (Button)FindViewById(Resource.Id.button1);
+            button = (Button)FindViewById(Resource.Id.button1);
 
             button.Click += delegate
             {
@@ -32,12 +34,13 @@ namespace AndroidApp1
         {
             base.OnActivityResult(requestCode, resultCode, data);
 
-            Bitmap? bitmap = data.Extras.Get("data") as Bitmap;
+            bitmap = data.Extras.Get("data") as Bitmap;
+
             imageView.SetImageBitmap(bitmap);
 
             using (var stream = new MemoryStream())
             {
-                bitmap.Compress(Bitmap.CompressFormat.Jpeg, 80, stream);
+                bitmap.Compress(Bitmap.CompressFormat.Jpeg, 90, stream);
                 SendToServer(stream.ToArray());            
             }
         }
@@ -47,13 +50,10 @@ namespace AndroidApp1
             TcpClient client = new("10.0.2.2", 1230);
             NetworkStream stream = client.GetStream();
 
-
-            stream.Write(data, 0, data.Length);
-            
-                stream.Close();
-                stream.Dispose();
-
-                client.Close();
+            stream.WriteAsync(data, 0, data.Length);
+          
+            stream.Close();
+            client.Close();
         }
     }
 }
