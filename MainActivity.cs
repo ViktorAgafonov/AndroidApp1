@@ -1,59 +1,76 @@
+using Android.App;
 using Android.Content;
 using Android.Graphics;
+using Android.OS;
+using Android.Provider;
+using Android.Widget;
+using System;
+using System.IO;
 using System.Net.Sockets;
 
 namespace AndroidApp1
 {
-
-
     [Activity(Label = "@string/app_name", MainLauncher = true)]
     public class MainActivity : Activity
     {
-        ImageView imageView;
-        Bitmap    bitmap;
-        Button    button;
+        private ImageView imageView;
+        private Button button;
 
-        protected override void OnCreate(Bundle? savedInstanceState)
+        protected override void OnCreate(Bundle savedInstanceState)
         {
             base.OnCreate(savedInstanceState);
-
-            // Set our view from the "main" layout resource
             SetContentView(Resource.Layout.activity_main);
 
-            imageView = (ImageView)FindViewById(Resource.Id.imageView1);
-            button = (Button)FindViewById(Resource.Id.button1);
+            imageView = FindViewById<ImageView>(Resource.Id.imageView1);
+            button = FindViewById<Button>(Resource.Id.button1);
 
-            button.Click += delegate
-            {
-                Intent intent = new Intent(Android.Provider.MediaStore.ActionImageCapture);
-                StartActivityForResult(intent, 0);
-            };
+            button.Click += ButtonClicked;
+        }
+
+        private void ButtonClicked(object sender, EventArgs e)
+        {
+            Intent intent = new Intent(MediaStore.ActionImageCapture);
+            StartActivityForResult(intent, 0);
         }
 
         protected override void OnActivityResult(int requestCode, Result resultCode, Intent data)
         {
             base.OnActivityResult(requestCode, resultCode, data);
 
-            bitmap = data.Extras.Get("data") as Bitmap;
-
-            imageView.SetImageBitmap(bitmap);
-
-            using (var stream = new MemoryStream())
+            if (data?.Extras?.Get("data") is Bitmap bitmap)
             {
-                bitmap.Compress(Bitmap.CompressFormat.Jpeg, 90, stream);
-                SendToServer(stream.ToArray());            
+                imageView.SetImageBitmap(bitmap);
+                SendToServer(bitmap);
             }
         }
 
-        void SendToServer(byte[] data)
+        private async void SendToServer(Bitmap bitmap)
         {
-            TcpClient client = new("10.0.2.2", 1230);
-            NetworkStream stream = client.GetStream();
+            using (MemoryStream stream = new MemoryStream())
+            {
+                await bitmap.CompressAsync(Bitmap.CompressFormat.Jpeg, 90, stream);
+                byte[] data = stream.ToArray();
+                int dataSize = data.Length;
 
-            stream.WriteAsync(data, 0, data.Length);
-          
-            stream.Close();
-            client.Close();
+                using (TcpClient client = new TcpClient())
+                {
+                    await client.ConnectAsync("10.0.2.2", 1230);
+                    NetworkStream networkStream = client.GetStream();
+
+                    // Отправляем размер данных
+                    byte[] dataSizeBytes = BitConverter.GetBytes(dataSize);
+                    await networkStream.WriteAsync(dataSizeBytes, 0, dataSizeBytes.Length);
+                    await networkStream.FlushAsync();
+
+                    // Отправляем данные изображения
+                    await networkStream.WriteAsync(data, 0, dataSize);
+                    await networkStream.FlushAsync();
+
+                    client.Close();
+                }
+            }
+
+            Toast.MakeText(this, "Image sent", ToastLength.Short).Show();
         }
     }
 }
